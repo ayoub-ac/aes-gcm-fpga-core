@@ -1,0 +1,40 @@
+# License
+
+This IP core is dual-licensed.
+
+## GPL-3.0-or-later (open-source use)
+
+Copyright (C) 2026 Ayoub Achour
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+The full GPL-3.0 text is canonical and lives at the FSF link above. A copy is available for convenience: <https://www.gnu.org/licenses/gpl-3.0.txt>.
+
+**What this means in practice**: if you use this RTL in a project, the project itself (including any FPGA bitstream produced from it) must also be released under GPL-3.0-or-later. The GPL is "viral" — your downstream users must receive the same rights you received, including the right to the complete corresponding source.
+
+If that is fine for your project, you are good to go. No fee, no email needed.
+
+## Commercial license (closed-source / proprietary use)
+
+If you want to use this core in a product whose source is not GPL — for example a closed-source IoT device, a SaaS appliance, a commercial FPGA board, an HSM, a VPN router, an MACsec / IPsec appliance, or a network appliance — you need a commercial license.
+
+The commercial license:
+
+- removes the GPL viral requirement,
+- grants you (and your company) the right to integrate the core into closed-source products,
+- gives you a clear, written grant you can show to your customers and to a due-diligence auditor,
+- includes a 1-year fix window on bugs and clarifications.
+
+Pricing tiers and the purchase link are listed at the project page (see the URL in the README citation block). For tier inquiries, email the address listed in the project page.
+
+## Trademarks
+
+"AES" is a public algorithm specified in NIST FIPS-197. "GCM" is the Galois/Counter Mode specified in NIST SP 800-38D. "AES-GCM" is the AEAD construction defined in SP 800-38D. No trademark claim is made on any of these names. You may freely state that this core implements AES-128-GCM / NIST SP 800-38D in your product documentation.
+
+## Patents
+
+To the best of the author's knowledge, AES, GCM, and the AES-GCM AEAD construction are not encumbered by patents in the United States or the European Union as of 2026. The original GCM patents (US 8,340,295 / WO 2003/063408) have expired in most jurisdictions. The author makes no warranty about patent freedom in other jurisdictions; if you ship hardware globally you are responsible for your own patent due diligence.
