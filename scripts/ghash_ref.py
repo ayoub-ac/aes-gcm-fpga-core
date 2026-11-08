@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later OR Commercial
+# SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-Commercial
 """Reference GHASH and AES-GCM test for cross-validation.
 
 Used to verify the directional convention of `ghash_core.sv` matches

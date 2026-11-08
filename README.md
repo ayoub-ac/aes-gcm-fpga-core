@@ -1,20 +1,20 @@
 # aes-gcm-fpga-core
 
 [![License: GPL-3.0-or-later or commercial](https://img.shields.io/badge/license-GPL--3.0%20%7C%20commercial-blue.svg)](LICENSE.md)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](#verification)
-[![NIST SP 800-38D vectors](https://img.shields.io/badge/NIST%20SP%20800--38D-vectors%20pass-blue.svg)](#verification)
-[![Lint](https://img.shields.io/badge/Verilator%20lint-clean-brightgreen.svg)](#build--test)
+
+> **Status: experimental and unverified.** This core was written with AI assistance and has not been independently verified in simulation regressions, formal proofs or hardware. Claims in this repository about standards compliance, test results, timing and resource use are unverified. It has not been validated under NIST CAVP/CMVP and has not been evaluated for side-channel or fault-injection resistance. Do not use it in production or security-sensitive designs without your own verification. No support or maintenance is provided.
 
 A small, synthesisable AES-128-GCM AEAD IP core in SystemVerilog.
-Implements NIST SP 800-38D end-to-end (AES-128 in CTR mode for
-confidentiality, GHASH over GF(2^128) for authentication, AEAD
-construction with AAD support, constant-time tag compare). Targets
+Implements the NIST SP 800-38D algorithm (not validated) for the 96-bit
+IV path: AES-128 in CTR mode for confidentiality, GHASH over GF(2^128)
+for authentication, AEAD construction with AAD support, and a tag
+compare intended to be constant-time (not evaluated). Targets
 iCE40, ECP5, Xilinx 7-series, Cyclone V, and Tang Nano 9K.
 
-The core is verified end-to-end against the NIST SP 800-38D Appendix B
-published vectors and 100 random vectors cross-checked against
-Python's `cryptography.hazmat.primitives.ciphers.aead.AESGCM`. No FPGA
-hardware is required for the test suite.
+NIST SP 800-38D Appendix B vectors and 100 random vectors generated with
+Python's `cryptography.hazmat.primitives.ciphers.aead.AESGCM` are included
+in the testbench; results not independently confirmed. No FPGA hardware is required to run
+the test suite.
 
 ## NONCE-REUSE WARNING
 
@@ -29,7 +29,7 @@ Encrypting two messages under the same key with the same IV leaks:
 This core does **not** detect or prevent IV reuse. The integrator MUST
 guarantee uniqueness of every `(key, IV)` pair. If you cannot prove
 uniqueness, use a nonce-misuse-resistant AEAD (AES-GCM-SIV, RFC 8452
-— on the Premium roadmap) or ChaCha20-Poly1305 with an extended nonce
+— not implemented here) or ChaCha20-Poly1305 with an extended nonce
 (see the sibling [chacha20poly1305-fpga-core](https://github.com/ayoub-ac/chacha20poly1305-fpga-core)
 project). Read [`SECURITY.md`](SECURITY.md) before deploying.
 
@@ -85,9 +85,10 @@ flow. Python 3 with `cryptography` for `make regen_vectors`.
 
 Top-level FSM phases: `IDLE -> DERIVE_H -> DERIVE_E0 -> AAD_RX ->
 AAD_GH -> DATA_KS -> DATA_XOR -> DATA_GH -> LEN_GH -> TAG -> DONE`.
-The FSM handles zero-padding of partial AAD / ciphertext chunks per
-SP 800-38D §7.1 and emits the final `(len64(aad_bits) || len64(ct_bits))`
-block to GHASH automatically.
+The FSM is designed to handle zero-padding of partial AAD / ciphertext
+chunks per SP 800-38D §7.1 and to emit the final
+`(len64(aad_bits) || len64(ct_bits))` block to GHASH automatically. Cycle
+counts in the diagram are design intent and unverified.
 
 ## Port table
 
@@ -118,13 +119,13 @@ block to GHASH automatically.
 | `finalize_i`        | in  | 1     | Pulse to finalise (alternative to `data_last_i` for streaming flows).                         | -        |
 | `tag_o`             | out | 128   | 128-bit GCM tag, byte 0 in `tag_o[127:120]`.                                                  | §7.1     |
 | `tag_valid_o`       | out | 1     | Tag is valid and stable.                                                                      | -        |
-| `expected_tag_i`    | in  | 128   | Caller-provided expected tag for constant-time compare.                                       | -        |
-| `tag_match_o`       | out | 1     | Constant-time comparison: `(tag_o == expected_tag_i) && tag_valid_o`.                         | -        |
+| `expected_tag_i`    | in  | 128   | Caller-provided expected tag for the tag compare.                                             | -        |
+| `tag_match_o`       | out | 1     | `(tag_o == expected_tag_i) && tag_valid_o`; intended to be constant-time, not evaluated.      | -        |
 
 ## Headline numbers
 
-Real numbers from `make synth_report` (Yosys 0.x, AEAD top with all
-sub-modules):
+Unverified estimates (Yosys 0.x, AEAD top with all sub-modules); they
+have not been independently reproduced:
 
 | Target           | LUT       | FF    | BRAM | Latency (1 KB msg)    | Notes                  |
 |------------------|-----------|-------|------|-----------------------|------------------------|
@@ -133,8 +134,9 @@ sub-modules):
 | Xilinx Artix-7   | see `SYNTH_REPORT.md` | ~3000 | 0    | ~9000 cycles          | Yosys generic mapping  |
 
 The 16x AES S-box LUT network and the 128-cycle GHASH multiplier
-dominate area cost. Vendor flows (Vivado / Diamond / Quartus) fold the
-S-boxes into block RAM and the gate count drops sharply; `synth_xilinx`
+dominate area cost. Vendor flows (Vivado / Diamond / Quartus) are
+expected to fold the S-boxes into block RAM and reduce the gate count
+(unverified); `synth_xilinx`
 shown here uses the open generic mapping. See
 [`RESOURCE_ESTIMATES.md`](RESOURCE_ESTIMATES.md) for the full breakdown
 and reduction options.
@@ -151,11 +153,13 @@ make test-ghash      # GHASH multiplier unit tests (50 random pairs)
 make test-all        # both suites
 ```
 
-A passing run ends with `+PASS all tests passed` and exits 0.
+The harness is written to end a passing run with `+PASS all tests passed` and
+exit 0. No passing run has been independently confirmed.
 
 ## Verification
 
-Three orthogonal techniques are wired into the testbench.
+Three techniques are wired into the testbench. Test vectors are included;
+results not independently confirmed.
 
 ### Directed tests (6 named cases + 4 supporting tests)
 
@@ -165,10 +169,10 @@ Three orthogonal techniques are wired into the testbench.
 | 2 | NIST SP 800-38D Appendix B TC2             | K=0, P=0^128 (one zero block), A=empty               |
 | 3 | NIST SP 800-38D Appendix B TC3             | 64-byte P, real K/IV, no AAD                         |
 | 4 | NIST SP 800-38D Appendix B TC4             | 60-byte P (3 full + partial), 20-byte AAD            |
-| 5 | Directed (cryptography ref, vec[0])        | Cross-validated against `AESGCM` library             |
-| 6 | Directed (cryptography ref, vec[1])        | Cross-validated against `AESGCM` library             |
-| 7 | Tampered expected_tag rejected             | `tag_match_o` constant-time compare                  |
-| 8 | 100 cross-validated random vectors         | `cryptography.hazmat.primitives.ciphers.aead.AESGCM` |
+| 5 | Directed (cryptography ref, vec[0])        | Expected values from the `AESGCM` library            |
+| 6 | Directed (cryptography ref, vec[1])        | Expected values from the `AESGCM` library            |
+| 7 | Tampered expected_tag rejected             | `tag_match_o` compare                                |
+| 8 | 100 random vectors                         | `cryptography.hazmat.primitives.ciphers.aead.AESGCM` |
 | 9 | Mode coverage (encrypt / decrypt / AAD-only)| All `mode_i` encodings                              |
 | 10 | Empty plaintext, empty AAD                | Boundary case                                        |
 
@@ -176,16 +180,17 @@ NIST SP 800-38D Appendix B Test Cases 5 and 6 use 8-byte and 60-byte
 IVs respectively, which require a separate GHASH-based J0 derivation
 step. The shipped core supports the 96-bit-IV path only — the only one
 used by TLS 1.2/1.3, IPsec ESP, SSH, and MACsec. Variable-length IV is
-on the Premium roadmap.
+not implemented.
 
 Plus a dedicated GHASH unit suite:
-* `make test-ghash`: 50 random GF(2^128) multiplies cross-checked against
-  a software GHASH reference implementing NIST SP 800-38D Algorithm 1.
+* `make test-ghash`: 50 random GF(2^128) multiplies compared against a
+  software GHASH reference implementing NIST SP 800-38D Algorithm 1;
+  results not independently confirmed.
 
 ### SystemVerilog assertions
 
-`tb/aes_gcm_assertions.sv` enforces protocol invariants on every cycle
-of every test:
+`tb/aes_gcm_assertions.sv` is intended to check protocol invariants on
+every cycle of every test:
 
 - `data_ready_o` only rises after `init_i` has been seen.
 - `result_o` is stable while back-pressured (`result_valid_o && !result_ready_i`).
@@ -194,13 +199,13 @@ of every test:
   (`finalize_i` pulse OR a `data_last_i` beat).
 - Tag latency bound after finalisation (`< LAT_MAX = 4096` cycles).
 
-The assertions compile with both Verilator 5.x (`--assert`) and Vivado
-xsim. They are stripped on synthesis flows via `` `ifndef SYNTHESIS ``.
+The assertions are intended to compile with both Verilator 5.x (`--assert`)
+and Vivado xsim (not independently confirmed). They are stripped on synthesis flows via `` `ifndef SYNTHESIS ``.
 
 ### Functional coverage
 
 `tb/aes_gcm_cov.sv` collects 11 bins. The simulator prints a coverage
-summary at end-of-test:
+summary at end-of-test in this format (illustrative output; results not independently confirmed):
 
 ```
 ---- Functional coverage ----
@@ -212,7 +217,7 @@ summary at end-of-test:
 Coverage: 11/11 bins (100.0%)
 ```
 
-A regression that drops below 100% fails the gate.
+The harness is intended to fail a run that drops below 100%.
 
 ### Synthesis comparison report
 
@@ -224,14 +229,14 @@ when not on `$PATH`.
 
 ## Variants
 
-| Variant                             | Use case                                                                       | Tier   |
-|-------------------------------------|--------------------------------------------------------------------------------|--------|
-| `rtl/aes_gcm_aead.sv`               | Default AEAD top: encrypt / decrypt / AAD-only, 96-bit IV, single clock domain | GPL    |
-| `rtl/aes_core.sv`                   | AES-128 core only (no GCM)                                                     | GPL    |
-| `rtl/ghash_core.sv`                 | GHASH GF(2^128) multiplier only                                                | GPL    |
-| `vhdl_wrapper/aes_gcm_aead_vhdl.vhd`| VHDL-2008 entity wrapping the SV core for VHDL-only designs                    | All    |
+| Variant                             | Use case                                                                       |
+|-------------------------------------|--------------------------------------------------------------------------------|
+| `rtl/aes_gcm_aead.sv`               | Default AEAD top: encrypt / decrypt / AAD-only, 96-bit IV, single clock domain |
+| `rtl/aes_core.sv`                   | AES-128 core only (no GCM)                                                     |
+| `rtl/ghash_core.sv`                 | GHASH GF(2^128) multiplier only                                                |
+| `vhdl_wrapper/aes_gcm_aead_vhdl.vhd`| VHDL-2008 entity wrapping the SV core for VHDL-only designs                    |
 
-Premium tier (on roadmap, not yet shipped):
+Roadmap (not implemented):
 * AES-256-GCM (256-bit key variant — most defence / FIPS-favoured deployments).
 * Variable-length IV path (NIST SP 800-38D §7.1, IV != 96 bits).
 * Karatsuba GF(2^128) multiplier (5-cycle absorb instead of 128-cycle).
@@ -246,8 +251,8 @@ Dual-licensed:
 - **GPL-3.0-or-later** for open-source projects. If your product links
   this RTL or its compiled bitstream, your project must also be
   GPL-3.0+.
-- **Commercial license** for closed-source products. See
-  [`LICENSE.md`](LICENSE.md) for the legal text and an FAQ.
+- **Commercial license** for closed-source products. Commercial licenses are available on request: open a GitHub issue titled 'Commercial license request'. Do not post confidential details in the issue. Any commercial license is provided as is, without warranty, support or maintenance. This core is unverified (see README).
+  See [`LICENSE.md`](LICENSE.md) for the license text.
 
 If unsure which applies, read `LICENSE.md` or open an issue.
 
@@ -270,7 +275,7 @@ tb/                        testbench
   aes_gcm_assertions.sv      SVA properties
   aes_gcm_cov.sv             functional coverage collector
   nist_sp800_38d_vectors.sv  NIST vectors (for non-Verilator simulators)
-  random_vectors.h           generated cross-validation vectors
+  random_vectors.h           generated reference vectors
   gen_random_vectors.py      regenerator (uses `cryptography` lib)
 vhdl_wrapper/              VHDL-2008 wrapper for mixed-language designs
 scripts/                   helper scripts (synth_report.sh, vhdl_cosim.sh,
@@ -285,7 +290,8 @@ Bug reports and patches welcome. Process:
 1. File an issue first for non-trivial changes.
 2. Fork, branch, and run `make lint test-all` locally.
 3. Open a pull request with a description of what changed and why.
-4. CI runs the full test suite plus `synth_report`; both must be green.
+4. There is no CI; include the output of your local `make lint test-all`
+   run in the pull request.
 
 ## Citation
 

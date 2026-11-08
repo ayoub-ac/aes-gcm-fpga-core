@@ -124,9 +124,10 @@ across this entire window.
 
 For the decrypt path, the caller drives `expected_tag_i` with the tag
 received over the wire. The core combinationally computes
-`tag_match_o = tag_valid_o && (tag_o ^ expected_tag_i == 0)`. There is
-no early-exit; the full 128-bit XOR-OR-zero is always evaluated, so
-`tag_match_o` does not leak partial-match information.
+`tag_match_o = tag_valid_o && (tag_o ^ expected_tag_i == 0)`. It is
+designed with no early-exit, so that the full 128-bit XOR-OR-zero is
+always evaluated and `tag_match_o` does not leak partial-match
+information. This is intended to be constant-time; not evaluated.
 
 For the encrypt path, leave `expected_tag_i = 0` (or any value); the
 caller will use `tag_o` directly.
@@ -135,8 +136,7 @@ caller will use `tag_o` directly.
 
 `mode_i` is a status bit recorded for the integrator's benefit. The
 hardware operations are identical for all three modes (AES-CTR XOR,
-GHASH absorb), but the value is exposed via debug ports and the
-coverage collector. In **DECRYPT** mode the GHASH input is the
+GHASH absorb), but the value is observed by the coverage collector. In **DECRYPT** mode the GHASH input is the
 ciphertext (i.e., `data_i` itself, NOT the XOR result) per NIST
 SP 800-38D §7.2; this is handled internally.
 
@@ -145,7 +145,7 @@ SP 800-38D §7.2; this is handled internally.
 | `2'b00`  | ENCRYPT   | Caller feeds plaintext, gets ciphertext + tag |
 | `2'b01`  | DECRYPT   | Caller feeds ciphertext, gets plaintext + tag, then verifies via `expected_tag_i` |
 | `2'b10`  | AAD_ONLY  | Caller feeds AAD only, no ct/pt; tag authenticates AAD alone |
-| `2'b11`  | reserved  | Reserved for future modes (e.g., AES-256-GCM in Premium tier). Treated as ENCRYPT for now. |
+| `2'b11`  | reserved  | Reserved for future modes (e.g., AES-256-GCM, not implemented). Treated as ENCRYPT for now. |
 
 ## Endianness
 
@@ -179,7 +179,7 @@ For a message with `A` bytes of AAD and `P` bytes of plaintext:
 | Total (rough)                  | `~26 + ceil(A/16)*128 + ceil(P/16)*140 + 128` |
 
 For a typical TLS 1.3 record with ~16 bytes AAD and ~16 KB plaintext,
-this is about 144 000 cycles, i.e. ~1.44 ms at 100 MHz. The throughput
-is dominated by GHASH; the Premium tier ships a Karatsuba GF(2^128)
-multiplier that brings each absorb down to ~5 cycles, lifting the
-end-to-end throughput by an order of magnitude.
+this is about 144 000 cycles, i.e. ~1.44 ms at 100 MHz (unverified
+estimate). The throughput is dominated by GHASH; a Karatsuba GF(2^128)
+multiplier (not included in this repository) could bring each absorb
+down to ~5 cycles (unverified estimate).

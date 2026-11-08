@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later OR Commercial
+// SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-Commercial
 //
 // Verilator C++ unit harness for ghash_core. Tests the GF(2^128) multiplier
 // in isolation against a software reference (NIST SP 800-38D Algorithm 1)

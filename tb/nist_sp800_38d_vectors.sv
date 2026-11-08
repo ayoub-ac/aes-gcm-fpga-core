@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later OR Commercial
+// SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-Commercial
 //
 // NIST SP 800-38D Appendix B published AES-128-GCM test vectors.
 // Reproduced here in SystemVerilog macro form for consumption by

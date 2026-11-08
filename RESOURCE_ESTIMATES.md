@@ -1,6 +1,8 @@
 # Resource estimates
 
-Numbers below are from Yosys 0.x generic synthesis (`make synth_report`).
+Numbers and comparisons below are unverified estimates attributed to Yosys
+0.x generic synthesis (`make synth_report`); none has been independently
+reproduced.
 They are pre-place-and-route. See `SYNTH_REPORT.md` for the most recent
 run; this document explains what dominates the area and how to shrink
 it.
@@ -9,17 +11,19 @@ it.
 
 | Target                         | Comment |
 |--------------------------------|---------|
-| Lattice iCE40 UP5K             | LUT-heavy: the 16x AES S-box LUTs and the 128-cycle GHASH XOR tree both expand to LUT4 networks. Fits comfortably on the UP5K (5280 logic tiles). |
+| Lattice iCE40 UP5K             | LUT-heavy: the 16x AES S-box LUTs and the 128-cycle GHASH XOR tree both expand to LUT4 networks. Whether it fits on the UP5K (5280 logic tiles) has not been confirmed; `SYNTH_REPORT.md` lists more LUTs than that. |
 | Lattice ECP5 LFE5UM-25         | LUT4 dominates. ECP5 generic synthesis in Yosys 0.x does not auto-pack the AES round into `MULT18X18`; nextpnr-ecp5 packs tighter; vendor (Diamond) tighter still. |
 | Xilinx Artix-7 XC7A35T         | Yosys-generic synthesis here counts LUT6 + CARRY4. Vivado synth_design will pack the AES S-box into BRAM18 if instructed and the LUT count drops sharply. |
 | Cyclone V 5CSEMA5F31C6         | Quartus folds the AES S-box into M10K block RAMs; ALM count is much lower than the Yosys soft estimate. |
 | Gowin GW1NR-9 (Tang Nano 9K)   | Not characterised here. Uses BRAM-backed S-box mapping; size comparable to ECP5 with vendor flow. |
 
 For exact LUT/FF/BRAM numbers run `make synth_report` and read
-`SYNTH_REPORT.md`. The synthesis-comparison report is regenerated on
-every CI build.
+`SYNTH_REPORT.md`. There is no CI; the synthesis-comparison report is
+regenerated only when `make synth_report` is run locally.
 
 ## What dominates the area
+
+Per-block figures in this section are unverified estimates.
 
 - **AES S-box (16 instances per round)**: 16 lookup tables, each
   256-entry 8-bit. Yosys generic synthesis maps each S-box to a tree
@@ -43,41 +47,47 @@ every CI build.
 
 ## What you can do to shrink it
 
+None of these options is included in this repository. Figures are
+unverified estimates.
+
 - **BRAM-mapped S-box**: replace the combinational `aes_sbox` with a
   256x8 ROM. Vivado / Quartus / Diamond do this automatically when the
   S-box is structured as a function of a single 8-bit input; the
   Yosys-generic flow does not. A `(* rom_style = "block" *)` attribute
   on the case statement reclaims roughly 40-50% of the LUT cost on
-  Artix-7 and ECP5. Available in the Premium tier.
+  Artix-7 and ECP5. Not included.
 - **Karatsuba GHASH multiplier**: replace the 128-cycle iterative
   multiplier with a 5-cycle pipelined Karatsuba-3 design. Cuts GHASH
-  latency by 25x at the cost of ~4-6k LUTs (combinational). Available
-  in the Premium tier.
+  latency by 25x at the cost of ~4-6k LUTs (combinational). Not
+  included.
 - **Single-S-box AES (8-bit datapath)**: serialise the 16 S-box
   invocations onto a single shared S-box, reducing AES area by ~10x at
   the cost of 16x latency per block. Reasonable for very small iCE40
-  boards. Available in the Premium tier.
+  boards. Not included.
 - **Decrypt-only / encrypt-only build**: drop `aes_inv_sbox` and the
   decrypt-side InvShiftRows / InvMixColumns network if the deployment
   only needs one direction. AEAD usage encrypts in both directions,
   but the *AES* engine inside our core only ever runs in encrypt
   direction (CTR mode is symmetric); a build flag to elide the inverse
-  path saves ~30% of AES LUTs. Available in the Premium tier.
+  path saves ~30% of AES LUTs. Not included.
 
 ## What you can do to push throughput
 
-- **Pipelined AES** (Premium): unroll the 10-round loop into a 10-stage
+- **Pipelined AES** (not included): unroll the 10-round loop into a 10-stage
   pipeline. Steady-state throughput becomes 1 keystream block per cycle
   instead of every 12 cycles. Requires ~10x area for the AES engine.
-- **Karatsuba GHASH** (Premium, see above): brings GHASH from 128
+- **Karatsuba GHASH** (not included, see above): brings GHASH from 128
   cycles to 5 cycles per absorb. Combined with pipelined AES, this
-  unlocks ~10 Gbps AES-GCM at 200 MHz on Artix-7.
+  could reach ~10 Gbps AES-GCM at 200 MHz on Artix-7 (unverified estimate).
 - **Cache one keystream block ahead**: prefetch the next AES_CTR block
   while the current one is being XORed and consumed. Hides the
   12-cycle keystream generation latency behind the data flow on long
   messages.
 
 ## Frequency
+
+The figures below are unverified estimates; no place-and-route timing has
+been confirmed.
 
 - iCE40 UP5K, default toolchain (Yosys + nextpnr), no constraints:
   limited by the AES S-box LUT depth and the GHASH conditional-XOR
@@ -91,13 +101,13 @@ The throughput is gated by both the cipher (1 keystream block per 12
 cycles) and the MAC (1 chunk per 128 cycles). For a 1-KB message, the
 AEAD finishes in roughly: 24 (init + H + E0) + 64 * 140 (AES + GHASH)
 + 128 (LEN absorb) ≈ 9100 cycles, i.e. ~9 cycles per byte. At 100 MHz
-this gives about 90 Mbps; the pipelined Premium variant pushes this to
-~10 Gbps on Artix-7 with DSP-mapped Karatsuba GHASH.
+this gives about 90 Mbps (unverified estimate); a pipelined variant with
+DSP-mapped Karatsuba GHASH (not included) is estimated at ~10 Gbps on
+Artix-7 (unverified estimate).
 
 ## Power
 
-Ballpark: 20-40 mW dynamic on iCE40 UP5K at 30 MHz, depending on data
-activity. The AES round update toggles ~1500 FFs every 12 cycles; the
+Power has not been characterized. The AES round update toggles ~1500 FFs every 12 cycles; the
 GHASH state toggles every cycle during absorb. Static power is
 dominated by the FPGA itself.
 
